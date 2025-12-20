@@ -1,0 +1,44 @@
+---
+title: "data_cleaning"
+format: html
+editor: source
+---
+
+```{r libraries}
+library(tidyverse)
+library(tidygeocoder)
+
+
+
+```
+
+```{r}
+
+providers <- read_csv("Approved-providers-au-export.csv")
+services <- read_csv("Education-services-au-export.csv")
+
+temp <- left_join(services,providers,by = "Provider Approval Number")
+
+# Selecting Variables of interest
+vars <- c("ServiceApprovalNumber", "Provider Approval Number", "ServiceName","ServiceAddress","Suburb.x","State.x","Postcode.x","NumberOfApprovedPlaces","ServiceApprovalGrantedDate", "Date Approval Granted","Long Day Care", "Preschool/Kindergarten - Part of a School", "Preschool/Kindergarten - Stand alone", "Outside school Hours Care - After School", "Outside school Hours Care - Before School", "Outside school Hours Care - Vacation Care")
+ccs <- select(temp, all_of(vars))
+
+# Shortening names for ease of use
+ccs <- ccs %>% rename(Suburb = "Suburb.x") %>% rename(State = "State.x") %>% rename(Postcode = "Postcode.x") %>% rename(Places = "NumberOfApprovedPlaces") %>% rename(ProviderDate = "Date Approval Granted") %>% rename(ServiceDate = "ServiceApprovalGrantedDate") %>% rename(LDC = "Long Day Care") %>% rename(WithSchool = "Preschool/Kindergarten - Part of a School") %>% rename(StandAlone= "Preschool/Kindergarten - Stand alone") %>% rename(OSHCAfter = "Outside school Hours Care - After School") %>% rename(OSHCBefore = "Outside school Hours Care - Before School") %>% rename(OSHCVacation = "Outside school Hours Care - Vacation Care")
+
+# Converting to dummy variables and lubridate formats
+ccs = ccs %>%
+  mutate(LDC = ifelse(ccs$LDC == 'Yes',1,0)) %>%
+  mutate(WithSchool = ifelse(ccs$WithSchool == 'Yes',1,0)) %>%
+  mutate(StandAlone = ifelse(ccs$StandAlone == 'Yes',1,0)) %>%
+  mutate(OSHCAfter = ifelse(ccs$OSHCAfter == 'Yes',1,0)) %>%
+  mutate(OSHCBefore = ifelse(ccs$OSHCBefore == 'Yes',1,0)) %>%
+  mutate(OSHCVacation = ifelse(ccs$OSHCVacation == 'Yes',1,0)) %>%
+  mutate(ServiceDate = dmy(ccs$ServiceDate)) %>%
+  mutate(ProviderDate = dmy(ccs$ProviderDate))
+
+
+
+
+
+```
