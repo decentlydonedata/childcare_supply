@@ -6,17 +6,12 @@ editor: source
 
 ```{r libraries}
 library(tidyverse)
-library(tidygeocoder)
-
-
-
 ```
 
 ```{r}
-
+# Reading and joining ____ date
 providers <- read_csv("Approved-providers-au-export.csv")
 services <- read_csv("Education-services-au-export.csv")
-
 temp <- left_join(services,providers,by = "Provider Approval Number")
 
 # Selecting Variables of interest
@@ -37,8 +32,99 @@ ccs = ccs %>%
   mutate(ServiceDate = dmy(ccs$ServiceDate)) %>%
   mutate(ProviderDate = dmy(ccs$ProviderDate))
 
+# Selecting Analysis variables of Childcare Providers
+vars <- c("Postcode", "Places", "ServiceDate", "LDC", "WithSchool", "StandAlone","OSHCAfter","OSHCBefore","OSHCVacation")
+ccspc <- select(ccs, all_of(vars))
+
+# Establishing census dates
+censusdate2021 <- dmy("10/08/2021")
+censusdate2016 <- dmy("09/08/2016")
+directorydate <- dmy("01/01/2012")
+
+# Filtering for services available before 2021 Census
+ccspc <- ccspc %>%
+  filter(ServiceDate<censusdate2021) 
+
+# Categorizing services introduced by 2016 and those after
+bins <- c(0,1,2,3)
+labels <- c("2021", "2016", "2011")
+ccspc <- ccspc %>%
+  mutate(Census2011 = ifelse(ServiceDate<=directorydate,1,0)) %>%
+  mutate(Census2016 = ifelse(ServiceDate<censusdate2016,1,0)) %>%
+  mutate(Census2021 = ifelse(ServiceDate<censusdate2021,1,0)) %>%
+  mutate(Census = Census2011+Census2016+Census2021) %>%
+  mutate(Year = cut(Census,breaks = bins, labels = labels, right = TRUE)) %>%
+  mutate(Places = ifelse(is.na(Places),0,Places)) %>%
+  mutate(LDCPlaces = Places*LDC) %>%
+  mutate(WithSchoolPlaces = Places*WithSchool) %>%
+  mutate(StandAlonePlaces = Places*StandAlone) %>%
+  mutate(OSHCAfterPlaces = Places*OSHCAfter) %>%
+  mutate(OSHCBeforePlaces = Places*OSHCBefore) %>%
+  mutate(OSHCVacationPlaces = Places*OSHCVacation)
+summary_ccspc <- ccspc %>%
+  group_by(Postcode, Year) %>%
+  summarise(
+    TtlPlaces = sum(Places),
+    TtlLDCPlaces = sum(LDCPlaces),
+    TtlWithSchoolPlaces = sum(WithSchool),
+    TtlStandAlonePlaces = sum(StandAlonePlaces),
+    TtlOSHCAfterPlaces = sum(OSHCAfterPlaces),
+    TtlOSHCBeforePlaces = sum(OSHCBeforePlaces),
+    TtlOSHCVacationPlaces = sum(OSHCVacationPlaces),
+    TtlLDC = sum(LDC),
+    TtlWithSchool = sum(WithSchool),
+    TtlStandAlone = sum(StandAlone),
+    TtlOSHCAfter = sum(OSHCAfter),
+    TtlOSHCBefore = sum(OSHCBefore),
+    TtlOSHCVacation = sum(OSHCVacation)
+  )
+print(summary_ccspc)
+summary_ccspc <- summary_ccspc %>%
+  mutate(Year = factor(Year))
+summary(ccs$Places)
+# Reading and adding variables for Census Data
+employment <- read_csv("familyemployment.csv")
+employment <- employment %>%
+  mutate(Fulltime = (ftft*2)+(ftpt)+(ftaw)+(ftun)+(ftnotlf)+(ftunstated)+(ft)) %>%
+  mutate(Parttime = (ptpt*2)+(ftpt)+(ptaw)+(ptun)+(ptnotlf)+(ptunstated)+(pt)) %>%
+  mutate(Away = (awaw*2)+ftaw+ptaw+awun+awnotlf+awunstated+aw) %>%
+  mutate(Unemployed = (unun*2)+ftun+ptun+awun+unnotlf+ununstated+un) %>%
+  mutate(NotInLF = (notlfnotlf*2)+ftnotlf+ptnotlf+unnotlf+awnotlf+notlfunstated+notlf) %>%
+  mutate(Unstated = (unstatedunstated*2)+ftunstated+ptunstated+ununstated+awunstated+notlfunstated+unstated) %>%
+  mutate(Postcode = str_remove(Postcode, ",.*")) %>% # Deletes everything after comma (NSW, VIC etc.)
+  mutate(Postcode = str_remove(Postcode, " .*")) # Deletes everything after a space ( crosses QLD/NSW)
+
+temp <- read.csv("children.csv")
+temp <- temp %>%
+  mutate(Postcode = str_remove(Postcode, ",.*")) %>% # Deletes everything after comma (NSW, VIC etc.)
+  mutate(Postcode = str_remove(Postcode, " .*")) %>% # Deletes everything after a space ( crosses QLD/NSW)
+  mutate(LDCAge = age0+age1+age2+age3+age4+age5) %>%
+  mutate(PreschoolAge = age3+age4+age5) %>%
+  mutate(OSHCAge = age6+age7+age8+age9+age10+age11+age12) %>%
+  mutate(OlderAge = age13+age14+age15)
+
+# Selecting analysis variables
+vars <- c("Postcode","Year","Fulltime","Parttime","Away","Unemployed","NotInLF","Unstated")
+combined <- select(employment, all_of(vars))
+vars <- c("Postcode","Year","LDCAge","PreschoolAge","OSHCAge","OlderAge")
+children <- select(temp, all_of(vars))
+
+combined <- left_join(combined, children, by = c("Postcode","Year"))
+
+# Additional variables per Postcode
+combined <- combined %>%
+  mutate(Parents = Fulltime+Parttime+Away+Unemployed+NotInLF+Unstated) %>%
+  mutate(Children = LDCAge+OSHCAge+OlderAge) %>%
+  mutate(Year = factor(Year))
+combined <- left_join(combined, summary_ccspc, by = c("Postcode", "Year"))
+summary(combined)
 
 
+#function that if postcode a aligns with postcode b and census date 
 
+# Plan is for a combined data set for each post code number of services(with different types) number of places (with different types), proportion of each employment type, labour force participation in each year (and perhaps some postcode fixed effects about number of children in each postcode at a given cross section)
+# Columns - Postcode, Year(Census), Fulltime, Parttime, Away, Unemployed, NotinLF, Unstated, LDC, With School, StandAlone, OSHCAfter, OSHCBefore, OSHCVacation, 0,1,2,3,4,5,6,7,8,9,10,11,12, 0-5, 6-12, Average Household Income, Unemployment rate?,  
 
+# for every service find matching postcode, if service was running by 2011 add the service types and places to 2011, 2016 and 2021, if service was running by 2016 add the service to 2016 and 2021, if service was run by 2021 add service to 2021
 ```
+
