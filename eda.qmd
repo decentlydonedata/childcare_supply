@@ -6,26 +6,26 @@ editor: source
 
 ```{r libraries}
 library(tidyverse)
+library(plm)
 ```
 
 ```{r}
+## Childcare Service Data
 # Reading and joining ____ date
 providers <- read_csv("Approved-providers-au-export.csv")
 services <- read_csv("Education-services-au-export.csv")
 temp <- left_join(services,providers,by = "Provider Approval Number")
 
 # Selecting Variables of interest
-vars <- c("ServiceApprovalNumber", "Provider Approval Number", "ServiceName","ServiceAddress","Suburb.x","State.x","Postcode.x","NumberOfApprovedPlaces","ServiceApprovalGrantedDate", "Date Approval Granted","Long Day Care", "Preschool/Kindergarten - Part of a School", "Preschool/Kindergarten - Stand alone", "Outside school Hours Care - After School", "Outside school Hours Care - Before School", "Outside school Hours Care - Vacation Care")
+vars <- c("ServiceApprovalNumber", "Provider Approval Number", "ServiceName","ServiceAddress","Suburb.x","State.x","Postcode.x","NumberOfApprovedPlaces","ServiceApprovalGrantedDate", "Date Approval Granted","Long Day Care", "Outside school Hours Care - After School", "Outside school Hours Care - Before School", "Outside school Hours Care - Vacation Care")
 ccs <- select(temp, all_of(vars))
 
 # Shortening names for ease of use
-ccs <- ccs %>% rename(Suburb = "Suburb.x") %>% rename(State = "State.x") %>% rename(Postcode = "Postcode.x") %>% rename(Places = "NumberOfApprovedPlaces") %>% rename(ProviderDate = "Date Approval Granted") %>% rename(ServiceDate = "ServiceApprovalGrantedDate") %>% rename(LDC = "Long Day Care") %>% rename(WithSchool = "Preschool/Kindergarten - Part of a School") %>% rename(StandAlone= "Preschool/Kindergarten - Stand alone") %>% rename(OSHCAfter = "Outside school Hours Care - After School") %>% rename(OSHCBefore = "Outside school Hours Care - Before School") %>% rename(OSHCVacation = "Outside school Hours Care - Vacation Care")
+ccs <- ccs %>% rename(Suburb = "Suburb.x") %>% rename(State = "State.x") %>% rename(Postcode = "Postcode.x") %>% rename(Places = "NumberOfApprovedPlaces") %>% rename(ProviderDate = "Date Approval Granted") %>% rename(ServiceDate = "ServiceApprovalGrantedDate") %>% rename(LDC = "Long Day Care") %>%  rename(OSHCAfter = "Outside school Hours Care - After School") %>% rename(OSHCBefore = "Outside school Hours Care - Before School") %>% rename(OSHCVacation = "Outside school Hours Care - Vacation Care")
 
 # Converting to dummy variables and lubridate formats
 ccs = ccs %>%
   mutate(LDC = ifelse(ccs$LDC == 'Yes',1,0)) %>%
-  mutate(WithSchool = ifelse(ccs$WithSchool == 'Yes',1,0)) %>%
-  mutate(StandAlone = ifelse(ccs$StandAlone == 'Yes',1,0)) %>%
   mutate(OSHCAfter = ifelse(ccs$OSHCAfter == 'Yes',1,0)) %>%
   mutate(OSHCBefore = ifelse(ccs$OSHCBefore == 'Yes',1,0)) %>%
   mutate(OSHCVacation = ifelse(ccs$OSHCVacation == 'Yes',1,0)) %>%
@@ -33,10 +33,11 @@ ccs = ccs %>%
   mutate(ProviderDate = dmy(ccs$ProviderDate))
 
 # Selecting Analysis variables of Childcare Providers
-vars <- c("Postcode", "Places", "ServiceDate", "LDC", "WithSchool", "StandAlone","OSHCAfter","OSHCBefore","OSHCVacation")
+vars <- c("Postcode", "Places", "ServiceDate", "LDC","OSHCAfter","OSHCBefore","OSHCVacation")
 ccspc <- select(ccs, all_of(vars))
+rm(ccs) # Removes original childcare services object
 
-# Establishing census dates
+# Establishing census dates/directory
 censusdate2021 <- dmy("10/08/2021")
 censusdate2016 <- dmy("09/08/2016")
 directorydate <- dmy("01/01/2012")
@@ -56,8 +57,6 @@ ccspc <- ccspc %>%
   mutate(Year = cut(Census,breaks = bins, labels = labels, right = TRUE)) %>%
   mutate(Places = ifelse(is.na(Places),0,Places)) %>%
   mutate(LDCPlaces = Places*LDC) %>%
-  mutate(WithSchoolPlaces = Places*WithSchool) %>%
-  mutate(StandAlonePlaces = Places*StandAlone) %>%
   mutate(OSHCAfterPlaces = Places*OSHCAfter) %>%
   mutate(OSHCBeforePlaces = Places*OSHCBefore) %>%
   mutate(OSHCVacationPlaces = Places*OSHCVacation)
@@ -66,22 +65,18 @@ summary_ccspc <- ccspc %>%
   summarise(
     TtlPlaces = sum(Places),
     TtlLDCPlaces = sum(LDCPlaces),
-    TtlWithSchoolPlaces = sum(WithSchool),
-    TtlStandAlonePlaces = sum(StandAlonePlaces),
     TtlOSHCAfterPlaces = sum(OSHCAfterPlaces),
     TtlOSHCBeforePlaces = sum(OSHCBeforePlaces),
     TtlOSHCVacationPlaces = sum(OSHCVacationPlaces),
     TtlLDC = sum(LDC),
-    TtlWithSchool = sum(WithSchool),
-    TtlStandAlone = sum(StandAlone),
     TtlOSHCAfter = sum(OSHCAfter),
     TtlOSHCBefore = sum(OSHCBefore),
     TtlOSHCVacation = sum(OSHCVacation)
   )
-print(summary_ccspc)
 summary_ccspc <- summary_ccspc %>%
   mutate(Year = factor(Year))
-summary(ccs$Places)
+
+## Employment Census Data
 # Reading and adding variables for Census Data
 employment <- read_csv("familyemployment.csv")
 employment <- employment %>%
@@ -93,9 +88,9 @@ employment <- employment %>%
   mutate(Unstated = (unstatedunstated*2)+ftunstated+ptunstated+ununstated+awunstated+notlfunstated+unstated) %>%
   mutate(Postcode = str_remove(Postcode, ",.*")) %>% # Deletes everything after comma (NSW, VIC etc.)
   mutate(Postcode = str_remove(Postcode, " .*")) # Deletes everything after a space ( crosses QLD/NSW)
-
-temp <- read.csv("children.csv")
-temp <- temp %>%
+## Age Census Data
+ages <- read.csv("children.csv")
+ages <- ages %>%
   mutate(Postcode = str_remove(Postcode, ",.*")) %>% # Deletes everything after comma (NSW, VIC etc.)
   mutate(Postcode = str_remove(Postcode, " .*")) %>% # Deletes everything after a space ( crosses QLD/NSW)
   mutate(LDCAge = age0+age1+age2+age3+age4+age5) %>%
@@ -103,13 +98,16 @@ temp <- temp %>%
   mutate(OSHCAge = age6+age7+age8+age9+age10+age11+age12) %>%
   mutate(OlderAge = age13+age14+age15)
 
+## Combining Census Data and Childcare Provider Data
 # Selecting analysis variables
 vars <- c("Postcode","Year","Fulltime","Parttime","Away","Unemployed","NotInLF","Unstated")
 combined <- select(employment, all_of(vars))
 vars <- c("Postcode","Year","LDCAge","PreschoolAge","OSHCAge","OlderAge")
-children <- select(temp, all_of(vars))
+children <- select(ages, all_of(vars))
 
 combined <- left_join(combined, children, by = c("Postcode","Year"))
+rm(employment) # Removing old variables once combined
+rm(ages) 
 
 # Additional variables per Postcode
 combined <- combined %>%
@@ -117,14 +115,119 @@ combined <- combined %>%
   mutate(Children = LDCAge+OSHCAge+OlderAge) %>%
   mutate(Year = factor(Year))
 combined <- left_join(combined, summary_ccspc, by = c("Postcode", "Year"))
-summary(combined)
+combined[is.na(combined)] <- 0
+```
+
+```{r}
+# Transforming based on year to get placed total by the census period rather than newly established in census period
+test1 <- combined %>% filter(Year == 2011)
+test1$Year <- NULL
+test2 <- combined %>% filter(Year == 2016)
+test2$Year <- NULL
+test3 <- combined %>% filter(Year == 2021)
+test3$Year <- NULL
+vars <- c(Fulltime2011 = "Fulltime", Parttime2011 = "Parttime", Away2011 = "Away", Unemployed2011 = "Unemployed", NotInLF2011 = "NotInLF", Unstated2011 = "Unstated", LDCAge2011 = "LDCAge", PreschoolAge2011 = "PreschoolAge", OSHCAge2011 = "OSHCAge", OlderAge2011 = "OlderAge", Parents2011 = "Parents", Children2011 = "Children", TtlPlaces2011 = "TtlPlaces", TtlLDCPlaces2011 = "TtlLDCPlaces", TtlOSHCAfterPlaces2011 = "TtlOSHCAfterPlaces", TtlOSHCBeforePlaces2011 = "TtlOSHCBeforePlaces", TtlOSHCVacationPlaces2011 = "TtlOSHCVacationPlaces", TtlLDC2011 = "TtlLDC", TtlOSHCAfter2011 = "TtlOSHCAfter", TtlOSHCBefore2011 = "TtlOSHCBefore", TtlOSHCVacation2011 = "TtlOSHCVacation") 
+test1 <- rename(test1, all_of(vars))
+vars <- c(Fulltime2016 = "Fulltime", Parttime2016 = "Parttime", Away2016 = "Away", Unemployed2016 = "Unemployed", NotInLF2016 = "NotInLF", Unstated2016 = "Unstated", LDCAge2016 = "LDCAge", PreschoolAge2016 = "PreschoolAge", OSHCAge2016 = "OSHCAge", OlderAge2016 = "OlderAge", Parents2016 = "Parents", Children2016 = "Children", TtlPlaces2016 = "TtlPlaces", TtlLDCPlaces2016 = "TtlLDCPlaces", TtlOSHCAfterPlaces2016 = "TtlOSHCAfterPlaces", TtlOSHCBeforePlaces2016 = "TtlOSHCBeforePlaces", TtlOSHCVacationPlaces2016 = "TtlOSHCVacationPlaces", TtlLDC2016 = "TtlLDC", TtlOSHCAfter2016 = "TtlOSHCAfter", TtlOSHCBefore2016 = "TtlOSHCBefore", TtlOSHCVacation2016 = "TtlOSHCVacation") 
+test2 <- rename(test2, all_of(vars))
+vars <- c(Fulltime2021 = "Fulltime", Parttime2021 = "Parttime", Away2021 = "Away", Unemployed2021 = "Unemployed", NotInLF2021 = "NotInLF", Unstated2021 = "Unstated", LDCAge2021 = "LDCAge", PreschoolAge2021 = "PreschoolAge", OSHCAge2021 = "OSHCAge", OlderAge2021 = "OlderAge", Parents2021 = "Parents", Children2021 = "Children", TtlPlaces2021 = "TtlPlaces", TtlLDCPlaces2021 = "TtlLDCPlaces", TtlOSHCAfterPlaces2021 = "TtlOSHCAfterPlaces", TtlOSHCBeforePlaces2021 = "TtlOSHCBeforePlaces", TtlOSHCVacationPlaces2021 = "TtlOSHCVacationPlaces", TtlLDC2021 = "TtlLDC", TtlOSHCAfter2021 = "TtlOSHCAfter", TtlOSHCBefore2021 = "TtlOSHCBefore", TtlOSHCVacation2021 = "TtlOSHCVacation") 
+test3 <- rename(test3, all_of(vars))
+
+# Summing to establish total places at time of census
+merged <- test1 %>%
+  inner_join(test2, by = "Postcode") %>%
+  inner_join(test3, by = "Postcode")
+merged <- merged %>%
+    mutate(TtlPlaces2016 = TtlPlaces2016 + TtlPlaces2011) %>%
+    mutate(TtlLDCPlaces2016 = TtlLDCPlaces2016 + TtlPlaces2011) %>%
+    mutate(TtlOSHCAfterPlaces2016 = TtlOSHCAfterPlaces2016 + TtlOSHCAfterPlaces2011) %>%
+    mutate(TtlOSHCBeforePlaces2016 = TtlOSHCBeforePlaces2016 + TtlOSHCBeforePlaces2011) %>%
+    mutate(TtlOSHCVacationPlaces2016 = TtlOSHCVacationPlaces2016 + TtlOSHCVacationPlaces2011) %>%
+    mutate(TtlLDC2016 = TtlLDC2016 + TtlLDC2011) %>%
+    mutate(TtlOSHCAfter2016 = TtlOSHCAfter2016 + TtlOSHCAfter2011) %>%
+    mutate(TtlOSHCBefore2016 = TtlOSHCBefore2016 + TtlOSHCBefore2011) %>%
+    mutate(TtlOSHCVacation2016 = TtlOSHCVacation2016 + TtlOSHCVacation2011) %>%
+    mutate(TtlPlaces2021 = TtlPlaces2016 + TtlPlaces2021) %>%
+    mutate(TtlLDCPlaces2021 = TtlLDCPlaces2016 + TtlPlaces2021) %>%
+    mutate(TtlOSHCAfterPlaces2021 = TtlOSHCAfterPlaces2016 + TtlOSHCAfterPlaces2021) %>%
+    mutate(TtlOSHCBeforePlaces2021 = TtlOSHCBeforePlaces2016 + TtlOSHCBeforePlaces2021) %>%
+    mutate(TtlOSHCVacationPlaces2021 = TtlOSHCVacationPlaces2016 + TtlOSHCVacationPlaces2021) %>%
+    mutate(TtlLDC2021 = TtlLDC2016 + TtlLDC2021) %>%
+    mutate(TtlOSHCAfter2021 = TtlOSHCAfter2016 + TtlOSHCAfter2021) %>%
+    mutate(TtlOSHCBefore2021 = TtlOSHCBefore2016 + TtlOSHCBefore2021) %>%
+    mutate(TtlOSHCVacation2021 = TtlOSHCVacation2016 + TtlOSHCVacation2021)
+rm(test1,test2,test3)
+
+vars <- c("Postcode","Fulltime2011", "Parttime2011", "Away2011", "Unemployed2011", "NotInLF2011", "Unstated2011", "LDCAge2011", "PreschoolAge2011", "OSHCAge2011", "OlderAge2011", "Parents2011", "Children2011", "TtlPlaces2011", "TtlLDCPlaces2011", "TtlOSHCAfterPlaces2011", "TtlOSHCBeforePlaces2011", "TtlOSHCVacationPlaces2011", "TtlLDC2011", "TtlOSHCAfter2011", "TtlOSHCBefore2011", "TtlOSHCVacation2011") 
+temp <- merged %>% select(vars) %>% mutate(Year = 2011)
+vars <- c(Fulltime = "Fulltime2011", Parttime = "Parttime2011", Away = "Away2011", Unemployed = "Unemployed2011", NotInLF = "NotInLF2011", Unstated = "Unstated2011", LDCAge = "LDCAge2011", PreschoolAge = "PreschoolAge2011", OSHCAge = "OSHCAge2011", OlderAge = "OlderAge2011", Parents = "Parents2011", Children = "Children2011", TtlPlaces = "TtlPlaces2011", TtlLDCPlaces = "TtlLDCPlaces2011", TtlOSHCAfterPlaces = "TtlOSHCAfterPlaces2011", TtlOSHCBeforePlaces = "TtlOSHCBeforePlaces2011", TtlOSHCVacationPlaces = "TtlOSHCVacationPlaces2011", TtlLDC = "TtlLDC2011", TtlOSHCAfter = "TtlOSHCAfter2011", TtlOSHCBefore = "TtlOSHCBefore2011", TtlOSHCVacation = "TtlOSHCVacation2011") 
+combined <- rename(temp, all_of(vars))
 
 
-#function that if postcode a aligns with postcode b and census date 
+vars <- c("Postcode","Fulltime2016", "Parttime2016", "Away2016", "Unemployed2016", "NotInLF2016", "Unstated2016", "LDCAge2016", "PreschoolAge2016", "OSHCAge2016", "OlderAge2016", "Parents2016", "Children2016", "TtlPlaces2016", "TtlLDCPlaces2016", "TtlOSHCAfterPlaces2016", "TtlOSHCBeforePlaces2016", "TtlOSHCVacationPlaces2016", "TtlLDC2016", "TtlOSHCAfter2016", "TtlOSHCBefore2016", "TtlOSHCVacation2016") 
+temp <- merged %>% select(vars) %>% mutate(Year = 2016)
+vars <- c(Fulltime = "Fulltime2016", Parttime = "Parttime2016", Away = "Away2016", Unemployed = "Unemployed2016", NotInLF = "NotInLF2016", Unstated = "Unstated2016", LDCAge = "LDCAge2016", PreschoolAge = "PreschoolAge2016", OSHCAge = "OSHCAge2016", OlderAge = "OlderAge2016", Parents = "Parents2016", Children = "Children2016", TtlPlaces = "TtlPlaces2016", TtlLDCPlaces = "TtlLDCPlaces2016", TtlOSHCAfterPlaces = "TtlOSHCAfterPlaces2016", TtlOSHCBeforePlaces = "TtlOSHCBeforePlaces2016", TtlOSHCVacationPlaces = "TtlOSHCVacationPlaces2016", TtlLDC = "TtlLDC2016", TtlOSHCAfter = "TtlOSHCAfter2016", TtlOSHCBefore = "TtlOSHCBefore2016", TtlOSHCVacation = "TtlOSHCVacation2016") 
+temp <- rename(temp, all_of(vars))
+combined <- bind_rows(combined, temp)
 
-# Plan is for a combined data set for each post code number of services(with different types) number of places (with different types), proportion of each employment type, labour force participation in each year (and perhaps some postcode fixed effects about number of children in each postcode at a given cross section)
-# Columns - Postcode, Year(Census), Fulltime, Parttime, Away, Unemployed, NotinLF, Unstated, LDC, With School, StandAlone, OSHCAfter, OSHCBefore, OSHCVacation, 0,1,2,3,4,5,6,7,8,9,10,11,12, 0-5, 6-12, Average Household Income, Unemployment rate?,  
+vars <- c("Postcode","Fulltime2021", "Parttime2021", "Away2021", "Unemployed2021", "NotInLF2021", "Unstated2021", "LDCAge2021", "PreschoolAge2021", "OSHCAge2021", "OlderAge2021", "Parents2021", "Children2021", "TtlPlaces2021", "TtlLDCPlaces2021", "TtlOSHCAfterPlaces2021", "TtlOSHCBeforePlaces2021", "TtlOSHCVacationPlaces2021", "TtlLDC2021", "TtlOSHCAfter2021", "TtlOSHCBefore2021", "TtlOSHCVacation2021") 
+temp <- merged %>% select(vars) %>% mutate(Year = 2021)
+vars <- c(Fulltime = "Fulltime2021", Parttime = "Parttime2021", Away = "Away2021", Unemployed = "Unemployed2021", NotInLF = "NotInLF2021", Unstated = "Unstated2021", LDCAge = "LDCAge2021", PreschoolAge = "PreschoolAge2021", OSHCAge = "OSHCAge2021", OlderAge = "OlderAge2021", Parents = "Parents2021", Children = "Children2021", TtlPlaces = "TtlPlaces2021", TtlLDCPlaces = "TtlLDCPlaces2021", TtlOSHCAfterPlaces = "TtlOSHCAfterPlaces2021", TtlOSHCBeforePlaces = "TtlOSHCBeforePlaces2021", TtlOSHCVacationPlaces = "TtlOSHCVacationPlaces2021", TtlLDC = "TtlLDC2021", TtlOSHCAfter = "TtlOSHCAfter2021", TtlOSHCBefore = "TtlOSHCBefore2021", TtlOSHCVacation = "TtlOSHCVacation2021") 
+temp <- rename(temp, all_of(vars))
+combined <- bind_rows(combined, temp)
+```
 
-# for every service find matching postcode, if service was running by 2011 add the service types and places to 2011, 2016 and 2021, if service was running by 2016 add the service to 2016 and 2021, if service was run by 2021 add service to 2021
+```{r}
+temp <- read_csv("RegionalPostCodes.csv")
+temp <- temp %>% 
+  mutate(R1 = ifelse(is.na(temp$R1),0,1)) %>%
+  mutate(R2 = ifelse(is.na(temp$R2),0,1)) %>%
+  mutate(R3 = ifelse(is.na(temp$R3),0,1)) %>%
+  mutate(Postcode = as.character(Postcode))
+  
+combined <- left_join(combined,temp)
+
+combined <- combined %>%
+  mutate(Year2016 = ifelse(combined$Year == '2016',1,0)) %>%
+  mutate(Year2021 = ifelse(combined$Year == '2021',1,0)) %>%
+  mutate(LFP = (Fulltime+Parttime+Away+Unemployed)/(Parents-Unstated)) %>%
+  mutate(perAway = (Away)/(Parents)) %>%
+  mutate(Access = TtlLDCPlaces/LDCAge) %>%
+  mutate(LDCper = LDCAge/Children)
+
+```
+
+```{r}
+
+combinedaccess <- combined %>%
+  filter(is.finite(Access)) %>%
+  filter(!is.na(Access)) %>%
+  filter(Access < 6)
+combinedpanel <- pdata.frame(combinedaccess, index = c("Postcode", "Year"))
+```
+
+```{r}
+
+# OLS models
+model1 <- lm(formula = LFP ~ TtlLDCPlaces + Year2016 + Year2021 + LDCAge + OSHCAge + OlderAge, data = combined)
+summary(model1)
+model2 <- lm(formula = LFP ~ Access + Year2016 + Year2021 + LDCAge + OSHCAge + OlderAge, data = combinedaccess)
+summary(model2)
+model3 <- lm(formula = LFP ~ TtlLDCPlaces + Year2016 + Year2021 + LDCAge + OSHCAge + OlderAge + R2 + R3, data = combined)
+summary(model3)
+model4 <- lm(formula = LFP ~ Access + Year2016 + Year2021 + LDCAge + OSHCAge + OlderAge + R2 + R3, data = combinedaccess)
+summary(model4)
+
+# Fixed effects model
+model5 <- plm(formula = LFP ~ TtlLDCPlaces + Year2016 + Year2021 + LDCAge + OSHCAge + OlderAge, model = "within", data = combinedpanel)
+summary(model5)
+model6 <- plm(formula = LFP ~ Access + Year2016 + Year2021 + LDCAge + OSHCAge + OlderAge, model = "within", data = combinedpanel)
+summary(model6)
+model7 <- plm(formula = LFP ~ TtlLDCPlaces + Year2016 + Year2021 + LDCAge + OSHCAge + OlderAge + R2 + R3, model = "within", data = combinedpanel)
+summary(model7)
+model8 <- plm(formula = LFP ~ Access + Year2016 + Year2021 + LDCAge + OSHCAge + OlderAge + R2 + R3, model = "within", data = combinedpanel)
+summary(model8)
+
+
 ```
 
